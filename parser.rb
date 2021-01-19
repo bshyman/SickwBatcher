@@ -7,6 +7,8 @@ gemfile do
   gem 'roo'
   gem 'httparty'
   gem 'tty-prompt'
+  gem 'whirly'
+  gem 'paint'
 end
 
 class Parser
@@ -23,6 +25,7 @@ class Parser
   
   def run
     @user_data = collect_user_data
+    Whirly.start(spinner: 'random_dots', status: 'Starting up...')
     parse_rows
   end
   
@@ -45,6 +48,7 @@ class Parser
   
   def parse_rows
     imeis.each do |imei|
+      Whirly.status = 'Hitting up sickw'
       response = call_sickw(imei)
       if response['status'] === 'success'
         @result_rows << parse_response(response)
@@ -61,7 +65,9 @@ class Parser
   end
   
   def call_sickw(imei)
+    Whirly.status = 'Waiting on Sickw for ' + imei
     response = HTTParty.get(SICKW_BASE_URL, { query: query_params(imei) })
+    Whirly.status = 'Analyzing response'
     parsed   = JSON.parse(response.body)
     log_output(parsed, imei)
     parsed
@@ -94,6 +100,7 @@ class Parser
   end
   
   def export
+    Whirly.status = 'Exporting...'
     csv = CSV.open('./outputs/results.csv', 'wb')
     
     headers = @result_rows.find { |row| row.is_a?(Hash) }.keys
@@ -107,6 +114,7 @@ class Parser
         csv << ["ERROR: #{e}"]
       end
     end
+    Whirly.stop
     puts 'Operation completed successfully'
   end
 end
