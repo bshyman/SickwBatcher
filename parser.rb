@@ -7,6 +7,8 @@ gemfile do
   gem 'roo'
   gem 'httparty'
   gem 'tty-prompt'
+  gem 'whirly'
+  gem 'paint'
 end
 
 class Parser
@@ -23,6 +25,7 @@ class Parser
   
   def run
     @user_data = collect_user_data
+    Whirly.start(spinner: 'random_dots', status: 'Starting up...')
     parse_rows
   end
   
@@ -45,12 +48,14 @@ class Parser
   
   def parse_rows
     imeis.each do |imei|
+      Whirly.status = 'Hitting up sickw'
       response = call_sickw(imei)
-      if response['status'].match('rejected|error|request-error')
+      if response['status'] === 'success'
+        @result_rows << parse_response(response)
+      elsif response['status']&.match('rejected|error|request-error')
         @result_rows << [imei, response['result'], response['status']]
-        next
+      else
       end
-      parse_response(response)
     end
     export
   end
@@ -60,7 +65,9 @@ class Parser
   end
   
   def call_sickw(imei)
+    Whirly.status = 'Waiting on Sickw for ' + imei
     response = HTTParty.get(SICKW_BASE_URL, { query: query_params(imei) })
+    Whirly.status = 'Analyzing response'
     parsed   = JSON.parse(response.body)
     log_output(parsed, imei)
     parsed
@@ -86,12 +93,29 @@ class Parser
   end
   
   def parse_response(response_data)
-    @result_rows << response_data['result'].split('<br />')[1..-1].map { |data_field| data_field.split(':').last }
+    imageless_fields = response_data['result'].split('<br />')[1..-1]
+    imageless_fields.map { |data_field| data_field.split(':') }.to_h
+  rescue StandardError => e
+    p e
   end
   
   def export
-    csv = CSV.open('./output.csv', 'wb')
-    @result_rows.each { |row| csv << row }
+    Whirly.status = 'Exporting...'
+    csv = CSV.open('./outputs/results.csv', 'wb')
+    
+    headers = @result_rows.find { |row| row.is_a?(Hash) }.keys
+    return puts 'All calls failed' if headers.nil?
+    csv << headers
+    @result_rows.each do |row|
+      begin
+        csv << (row.is_a?(Hash) ? row.values : row)
+      rescue StandardError => e
+        puts e
+        csv << ["ERROR: #{e}"]
+      end
+    end
+    Whirly.stop
+    puts 'Operation completed successfully'
   end
 end
 
