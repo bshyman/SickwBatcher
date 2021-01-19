@@ -1,6 +1,8 @@
 # SickwBatcher
 Ruby script to import a spreadsheet of imeis and call a sickw.com service on each
 
+Sickw services tested: `30`
+
 Todos:
  - [ ] Add headers to output file
  - [ ] Strip out html
@@ -12,3 +14,4 @@ Todos:
  - [ ] Prompt for output file type
  - [ ] Install dependency directions
  - [ ] Write a test or two
+ 
