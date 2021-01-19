@@ -12,7 +12,7 @@ gemfile do
 end
 
 class Parser
-  API_KEY = ""
+  API_KEY = ENV['SICKW_API_KEY']
   
   SICKW_BASE_URL           = "https://sickw.com/api.php"
   SICKW_API_KEY_VALIDATION = /((\d|\w){3}-?){8}/i
