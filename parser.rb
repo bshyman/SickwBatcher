@@ -46,11 +46,13 @@ class Parser
   def parse_rows
     imeis.each do |imei|
       response = call_sickw(imei)
-      if response['status'].match('rejected|error|request-error')
+      if response['status'] === 'success'
+        @result_rows << parse_response(response)
+      elsif response['status'].match('rejected|error|request-error')
         @result_rows << [imei, response['result'], response['status']]
-        next
+      else
+        raise 'Unsupported status:' + response['status']
       end
-      parse_response(response)
     end
     export
   end
@@ -86,12 +88,27 @@ class Parser
   end
   
   def parse_response(response_data)
-    @result_rows << response_data['result'].split('<br />')[1..-1].map { |data_field| data_field.split(':').last }
+    imageless_fields = response_data['result'].split('<br />')[1..-1]
+    imageless_fields.map { |data_field| data_field.split(':') }.to_h
+  rescue StandardError => e
+    p e
   end
   
   def export
-    csv = CSV.open('./output.csv', 'wb')
-    @result_rows.each { |row| csv << row }
+    csv = CSV.open('./outputs/results.csv', 'wb')
+    
+    headers = @result_rows.find { |row| row.is_a?(Hash) }.keys
+    return puts 'All calls failed' if headers.nil?
+    csv << headers
+    @result_rows.each do |row|
+      begin
+        csv << (row.is_a?(Hash) ? row.values : row)
+      rescue StandardError => e
+        puts e
+        csv << ["ERROR: #{e}"]
+      end
+    end
+    puts 'Operation completed successfully'
   end
 end
 
