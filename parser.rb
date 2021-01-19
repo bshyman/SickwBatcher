@@ -26,6 +26,7 @@ class Parser
   def run
     @user_data = collect_user_data
     Whirly.start(spinner: 'random_dots', status: 'Starting up...')
+    sleep 1
     parse_rows
   end
   
@@ -49,9 +50,10 @@ class Parser
   def parse_rows
     imeis.each do |imei|
       Whirly.status = 'Hitting up sickw'
+      sleep 1
       response = call_sickw(imei)
       if response['status'] === 'success'
-        @result_rows << parse_response(response)
+        @result_rows << parse_response(response).map{|field, val | val.gsub(/<\/?[^>]*>/, "")}
       elsif response['status']&.match('rejected|error|request-error')
         @result_rows << [imei, response['result'], response['status']]
       else
@@ -94,18 +96,19 @@ class Parser
   
   def parse_response(response_data)
     imageless_fields = response_data['result'].split('<br />')[1..-1]
-    imageless_fields.map { |data_field| data_field.split(':') }.to_h
+    fields_map = imageless_fields.map { |data_field| data_field.split(':') }.to_h
+    @headers ||= fields_map.keys
+    fields_map
   rescue StandardError => e
     p e
   end
   
   def export
-    Whirly.status = 'Exporting...'
-    csv = CSV.open('./outputs/results.csv', 'wb')
-    
-    headers = @result_rows.find { |row| row.is_a?(Hash) }.keys
-    return puts 'All calls failed' if headers.nil?
-    csv << headers
+    path = './outputs/results.csv'
+    Whirly.status = "Exporting to #{path.sub('.', Dir.pwd)}"
+    sleep 2
+    csv = CSV.open(path, 'wb')
+    csv << @headers
     @result_rows.each do |row|
       begin
         csv << (row.is_a?(Hash) ? row.values : row)
