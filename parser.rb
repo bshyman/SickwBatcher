@@ -72,7 +72,7 @@ class Parser
   
   def parse_rows
     imeis.each do |imei|
-      Whirly.status = 'Hitting up sickw'
+      Whirly.status = 'Hitting up Sickw'
       sleep 1
       response = call_sickw(imei)
       if response['status'] === 'success'
@@ -80,6 +80,7 @@ class Parser
       elsif response['status']&.match('rejected|error|request-error')
         @result_rows << [imei, response['result'], response['status']]
       else
+        @result_rows << [imei, response['result'], response['status']]
       end
     end
     export
@@ -92,9 +93,8 @@ class Parser
   def call_sickw(imei)
     Whirly.status = 'Waiting on Sickw for ' + imei
     response = HTTParty.get(SICKW_BASE_URL, { query: query_params(imei) })
-    Whirly.status = 'Analyzing response'
     parsed   = JSON.parse(response.body)
-    log_output(parsed, imei)
+    puts log_output(parsed, imei)
     parsed
   rescue StandardError => e
     { 'status': 'request-error', 'result': e }
@@ -102,9 +102,9 @@ class Parser
   
   def log_output(parsed_response, imei)
     if parsed_response['status'] == 'success'
-      puts [imei, 'SUCCESS'].join(' - ')
+      "SUCCESS: #{imei}                                            "
     else
-      puts [imei, parsed_response['status'], parsed_response['result']].join(' - ')
+      [parsed_response['status'].upcase, imei, parsed_response['result']].join(' - ')
     end
   end
   
