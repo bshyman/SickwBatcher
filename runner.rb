@@ -11,7 +11,7 @@ gemfile do
   gem 'paint'
 end
 
-class Parser
+class Runner
   API_KEY = ENV['SICKW_API_KEY']
   
   SICKW_BASE_URL           = "https://sickw.com/api.php"
@@ -147,5 +147,5 @@ class Parser
 
 end
 
-Parser.new.run
+Runner.new.run
 
