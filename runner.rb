@@ -11,50 +11,76 @@ gemfile do
   gem 'paint'
 end
 
-class Parser
-  API_KEY = ""
+class Runner
+  API_KEY = ENV['SICKW_API_KEY']
   
   SICKW_BASE_URL           = "https://sickw.com/api.php"
   SICKW_API_KEY_VALIDATION = /((\d|\w){3}-?){8}/i
-  DEFAULT_SICKW_SERVICE    = 30
+  SICKW_SERVICES           = [{ code: 30, name: 'Apple Basic Info', price: '0.10' }]
+  DEFAULT_SICKW_SERVICE    = SICKW_SERVICES.first[:code]
   
   def initialize
     @prompt      = TTY::Prompt.new
     @result_rows = []
   end
-  
+
   def run
     @user_data = collect_user_data
+    @prompt.ok('')
+  
+    price     = SICKW_SERVICES.find { |service_hash| service_hash[:code] == @user_data[:service] }[:price]
+    cost      = imeis.size * BigDecimal(price)
+    formatted = sprintf('%.2f', cost)
+    proceed   = @prompt.yes?("Run will cost $#{formatted}. Proceed?")
+    return @prompt.say('Shutting down...') unless proceed
+    
     Whirly.start(spinner: 'random_dots', status: 'Starting up...')
+    sleep 1
     parse_rows
   end
-  
+
+  def balance
+    Whirly.status = 'Refreshing balance'
+    sleep 2
+    response      = HTTParty.get(SICKW_BASE_URL + '?format=json&key=DZ3-DZL-72K-BLW-T65-8FB-VK1-IW4&imei=354442067957452&service=demo')
+    JSON.parse(response)['balance']
+  end
+
   private
-  
+
   def collect_user_data
+    bal = balance
     @prompt.collect do
       key(:api_key).mask("Please enter your Sickw api key") do |answer|
         answer.default API_KEY
         answer.validate SICKW_API_KEY_VALIDATION, 'Api Key must be 24 characters (excluding dashes)'
       end
+      @prompt.ok "Your balance is $#{bal}"
       if ARGV[0].nil?
         key(:path).ask("Please enter the path to your file", required: true)
       else
         @answers[:path] = ARGV[0]
       end
-      key(:service).ask('Please specify a service', default: 30)
+      key(:service).select("Select a service") do |menu|
+        menu.enum "."
+        SICKW_SERVICES.each do |service_hash|
+          menu.choice "#{service_hash[:name]} - $#{service_hash[:price]}", service_hash[:code]
+        end
+      end
     end
   end
   
   def parse_rows
     imeis.each do |imei|
-      Whirly.status = 'Hitting up sickw'
+      Whirly.status = 'Hitting up Sickw'
+      sleep 1
       response = call_sickw(imei)
       if response['status'] === 'success'
-        @result_rows << parse_response(response)
+        @result_rows << parse_response(response).map{|field, val | val.gsub(/<\/?[^>]*>/, "")}
       elsif response['status']&.match('rejected|error|request-error')
         @result_rows << [imei, response['result'], response['status']]
       else
+        @result_rows << [imei, response['result'], response['status']]
       end
     end
     export
@@ -67,9 +93,8 @@ class Parser
   def call_sickw(imei)
     Whirly.status = 'Waiting on Sickw for ' + imei
     response = HTTParty.get(SICKW_BASE_URL, { query: query_params(imei) })
-    Whirly.status = 'Analyzing response'
     parsed   = JSON.parse(response.body)
-    log_output(parsed, imei)
+    puts log_output(parsed, imei)
     parsed
   rescue StandardError => e
     { 'status': 'request-error', 'result': e }
@@ -77,9 +102,9 @@ class Parser
   
   def log_output(parsed_response, imei)
     if parsed_response['status'] == 'success'
-      puts [imei, 'SUCCESS'].join(' - ')
+      "SUCCESS: #{imei}                                            "
     else
-      puts [imei, parsed_response['status'], parsed_response['result']].join(' - ')
+      [parsed_response['status'].upcase, imei, parsed_response['result']].join(' - ')
     end
   end
   
@@ -94,18 +119,19 @@ class Parser
   
   def parse_response(response_data)
     imageless_fields = response_data['result'].split('<br />')[1..-1]
-    imageless_fields.map { |data_field| data_field.split(':') }.to_h
+    fields_map = imageless_fields.map { |data_field| data_field.split(':') }.to_h
+    @headers ||= fields_map.keys
+    fields_map
   rescue StandardError => e
     p e
   end
   
   def export
-    Whirly.status = 'Exporting...'
-    csv = CSV.open('./outputs/results.csv', 'wb')
-    
-    headers = @result_rows.find { |row| row.is_a?(Hash) }.keys
-    return puts 'All calls failed' if headers.nil?
-    csv << headers
+    path = './outputs/results.csv'
+    Whirly.status = "Exporting to #{path.sub('.', Dir.pwd)}"
+    sleep 2
+    csv = CSV.open(path, 'wb')
+    csv << @headers
     @result_rows.each do |row|
       begin
         csv << (row.is_a?(Hash) ? row.values : row)
@@ -114,10 +140,12 @@ class Parser
         csv << ["ERROR: #{e}"]
       end
     end
+    Whirly.status = ''
     Whirly.stop
     puts 'Operation completed successfully'
   end
+
 end
 
-Parser.new.run
+Runner.new.run
 
